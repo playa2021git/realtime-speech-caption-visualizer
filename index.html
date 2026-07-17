@@ -1,0 +1,1656 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="マイクに入った日本語をリアルタイムで大きな文字に変換し、音の波形・周波数・音量も可視化する授業用Web教材">
+    <title>リアルタイム音声字幕＆音の見える化</title>
+    <style>
+        :root {
+            color-scheme: dark;
+            --bg: #080a11;
+            --panel: rgba(20, 23, 36, 0.92);
+            --panel-soft: rgba(27, 31, 48, 0.78);
+            --border: rgba(148, 163, 255, 0.22);
+            --text: #f7f7ff;
+            --muted: #a7adbf;
+            --purple: #8b5cf6;
+            --purple-light: #c4b5fd;
+            --blue: #60a5fa;
+            --pink: #f472b6;
+            --green: #4ade80;
+            --yellow: #fbbf24;
+            --red: #fb7185;
+            --shadow: 0 20px 54px rgba(0, 0, 0, 0.34);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            color: var(--text);
+            font-family:
+                "BIZ UDPGothic", "Yu Gothic UI", "Yu Gothic",
+                "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+            background:
+                radial-gradient(circle at 10% 0%, rgba(124, 58, 237, 0.20), transparent 34rem),
+                radial-gradient(circle at 92% 8%, rgba(37, 99, 235, 0.14), transparent 30rem),
+                linear-gradient(160deg, #121522 0%, var(--bg) 57%, #06070c 100%);
+        }
+
+        button,
+        input {
+            font: inherit;
+        }
+
+        button {
+            color: inherit;
+        }
+
+        button:focus-visible,
+        input:focus-visible {
+            outline: 3px solid rgba(196, 181, 253, 0.92);
+            outline-offset: 3px;
+        }
+
+        .app {
+            width: min(1480px, calc(100% - 28px));
+            margin: 0 auto;
+            padding: 16px 0 34px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 18px;
+            margin-bottom: 13px;
+        }
+
+        .title-wrap {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .mic-indicator {
+            width: 16px;
+            height: 16px;
+            flex: 0 0 auto;
+            border-radius: 999px;
+            background: #4b5563;
+            transition: 0.2s ease;
+        }
+
+        .mic-indicator.active {
+            background: var(--red);
+            animation: pulse 1.45s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(251, 113, 133, 0.52); }
+            70% { box-shadow: 0 0 0 11px rgba(251, 113, 133, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(251, 113, 133, 0); }
+        }
+
+        h1 {
+            margin: 0;
+            font-size: clamp(1.35rem, 2.5vw, 2.05rem);
+            letter-spacing: 0.035em;
+            background: linear-gradient(90deg, #c4b5fd, #f0abfc, #93c5fd);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+
+        .subtitle {
+            margin: 5px 0 0;
+            color: var(--muted);
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .status {
+            max-width: 480px;
+            padding: 10px 14px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            color: var(--muted);
+            background: rgba(15, 17, 28, 0.8);
+            font-size: 0.84rem;
+            line-height: 1.45;
+        }
+
+        .status.active {
+            color: #fee2e2;
+            border-color: rgba(251, 113, 133, 0.46);
+            background: rgba(127, 29, 29, 0.3);
+        }
+
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 9px;
+            margin-bottom: 13px;
+        }
+
+        .step {
+            padding: 10px 13px;
+            border: 1px solid rgba(129, 140, 248, 0.2);
+            border-radius: 13px;
+            background: rgba(49, 46, 129, 0.18);
+            font-size: 0.83rem;
+            line-height: 1.45;
+        }
+
+        .step strong {
+            display: inline-grid;
+            place-items: center;
+            width: 23px;
+            height: 23px;
+            margin-right: 6px;
+            border-radius: 999px;
+            color: #ede9fe;
+            background: rgba(139, 92, 246, 0.34);
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 9px;
+            padding: 11px;
+            margin-bottom: 13px;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            background: var(--panel);
+            box-shadow: var(--shadow);
+        }
+
+        .btn {
+            min-height: 42px;
+            padding: 9px 14px;
+            border: 1px solid rgba(148, 163, 184, 0.27);
+            border-radius: 11px;
+            background: rgba(55, 65, 81, 0.73);
+            cursor: pointer;
+            font-weight: 800;
+            transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+            border-color: rgba(196, 181, 253, 0.66);
+            background: rgba(75, 85, 99, 0.9);
+        }
+
+        .btn:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+
+        .btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.48;
+        }
+
+        .btn-primary {
+            border: 0;
+            background: linear-gradient(90deg, #7c3aed, #4f46e5);
+            box-shadow: 0 9px 25px rgba(79, 70, 229, 0.25);
+        }
+
+        .btn-primary.listening {
+            background: linear-gradient(90deg, #be123c, #db2777);
+        }
+
+        .btn-active {
+            border-color: rgba(74, 222, 128, 0.55);
+            background: rgba(20, 83, 45, 0.6);
+            color: #dcfce7;
+        }
+
+        .size-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 42px;
+            padding: 6px 11px;
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 11px;
+            background: rgba(31, 41, 55, 0.64);
+            color: #d1d5db;
+            font-size: 0.78rem;
+            font-weight: 700;
+        }
+
+        .size-control input {
+            width: 120px;
+            accent-color: var(--purple);
+        }
+
+        .btn-danger {
+            margin-left: auto;
+            color: #fecdd3;
+            border-color: rgba(251, 113, 133, 0.3);
+            background: rgba(136, 19, 55, 0.32);
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: minmax(0, 1.55fr) minmax(310px, 0.65fr);
+            gap: 13px;
+            align-items: stretch;
+        }
+
+        .panel {
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            background: var(--panel);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 13px;
+            padding: 12px 15px 10px;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+        }
+
+        .panel-title {
+            margin: 0;
+            color: #ddd6fe;
+            font-size: 0.96rem;
+            letter-spacing: 0.025em;
+        }
+
+        .panel-note {
+            color: var(--muted);
+            font-size: 0.73rem;
+            line-height: 1.5;
+            text-align: right;
+        }
+
+        .caption-panel {
+            display: flex;
+            flex-direction: column;
+            min-height: 620px;
+        }
+
+        .live-caption {
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+            justify-content: center;
+            min-height: 390px;
+            padding: clamp(20px, 3vw, 44px);
+            background:
+                radial-gradient(circle at center, rgba(139, 92, 246, 0.14), transparent 66%),
+                rgba(6, 7, 13, 0.48);
+        }
+
+        .caption-label {
+            color: var(--purple-light);
+            font-size: 0.75rem;
+            font-weight: 900;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+        }
+
+        .interim-text {
+            margin: 14px 0 0;
+            color: #f8fafc;
+            font-size: var(--caption-size, 64px);
+            font-weight: 900;
+            line-height: 1.45;
+            letter-spacing: 0.02em;
+            overflow-wrap: anywhere;
+            text-wrap: pretty;
+            text-shadow:
+                0 0 18px rgba(255, 255, 255, 0.13),
+                0 0 36px rgba(139, 92, 246, 0.22);
+        }
+
+        .interim-text.placeholder {
+            color: #6b7280;
+            font-weight: 700;
+        }
+
+        .confidence-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px 16px;
+            margin-top: 17px;
+            color: var(--muted);
+            font-size: 0.76rem;
+        }
+
+        .confidence-chip {
+            padding: 5px 9px;
+            border-radius: 999px;
+            background: rgba(55, 65, 81, 0.67);
+        }
+
+        .confirmed-wrap {
+            padding: 14px 16px 16px;
+            border-top: 1px solid rgba(148, 163, 184, 0.14);
+            background: rgba(10, 12, 20, 0.56);
+        }
+
+        .confirmed-label {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 7px;
+            color: #a78bfa;
+            font-size: 0.72rem;
+            font-weight: 800;
+        }
+
+        .confirmed-text {
+            min-height: 72px;
+            max-height: 170px;
+            overflow-y: auto;
+            padding-right: 5px;
+            color: #e5e7eb;
+            font-size: 1.05rem;
+            line-height: 1.75;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+        }
+
+        .confirmed-text.empty {
+            color: #6b7280;
+        }
+
+        .visual-panel {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .visual-content {
+            display: grid;
+            gap: 11px;
+            padding: 12px;
+        }
+
+        .visual-box {
+            padding: 9px;
+            border: 1px solid rgba(148, 163, 184, 0.14);
+            border-radius: 12px;
+            background: rgba(2, 3, 8, 0.68);
+        }
+
+        .visual-heading {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            color: #d1d5db;
+            font-size: 0.73rem;
+            font-weight: 800;
+        }
+
+        .visual-value {
+            color: #a78bfa;
+            font-variant-numeric: tabular-nums;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            border-radius: 8px;
+            background: #05060b;
+        }
+
+        #wave-canvas {
+            height: 120px;
+        }
+
+        #spectrum-canvas {
+            height: 165px;
+        }
+
+        .volume-meter {
+            height: 14px;
+            overflow: hidden;
+            border-radius: 999px;
+            background: rgba(75, 85, 99, 0.6);
+        }
+
+        .volume-bar {
+            width: 0%;
+            height: 100%;
+            border-radius: inherit;
+            background: linear-gradient(90deg, #4ade80, #fbbf24 70%, #fb7185);
+            transition: width 0.08s linear;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .stat {
+            padding: 10px;
+            border: 1px solid rgba(148, 163, 184, 0.13);
+            border-radius: 10px;
+            background: rgba(31, 41, 55, 0.48);
+        }
+
+        .stat-label {
+            display: block;
+            color: var(--muted);
+            font-size: 0.67rem;
+            line-height: 1.4;
+        }
+
+        .stat-value {
+            display: block;
+            margin-top: 4px;
+            color: #f3f4f6;
+            font-size: 1.05rem;
+            font-weight: 900;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .history-section {
+            margin-top: 13px;
+        }
+
+        .history-list {
+            display: grid;
+            gap: 8px;
+            padding: 12px;
+        }
+
+        .history-item {
+            display: grid;
+            grid-template-columns: 34px 1fr auto;
+            gap: 10px;
+            align-items: start;
+            padding: 10px 11px;
+            border: 1px solid rgba(148, 163, 184, 0.13);
+            border-radius: 11px;
+            background: rgba(15, 17, 28, 0.68);
+        }
+
+        .history-number {
+            display: grid;
+            place-items: center;
+            width: 29px;
+            height: 29px;
+            border-radius: 999px;
+            color: #ddd6fe;
+            background: rgba(124, 58, 237, 0.28);
+            font-size: 0.75rem;
+            font-weight: 900;
+        }
+
+        .history-text {
+            min-width: 0;
+            color: #d1d5db;
+            font-size: 0.88rem;
+            line-height: 1.65;
+            overflow-wrap: anywhere;
+        }
+
+        .history-time {
+            color: #6b7280;
+            font-size: 0.68rem;
+            white-space: nowrap;
+        }
+
+        .history-empty {
+            padding: 18px;
+            color: #6b7280;
+            text-align: center;
+            font-size: 0.82rem;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 11px;
+            margin-top: 13px;
+        }
+
+        .info-box {
+            padding: 12px 14px;
+            border: 1px solid rgba(148, 163, 184, 0.17);
+            border-radius: 13px;
+            background: rgba(17, 20, 31, 0.78);
+            color: #d1d5db;
+            font-size: 0.78rem;
+            line-height: 1.7;
+        }
+
+        .info-box strong {
+            color: #e9d5ff;
+        }
+
+        .info-box.warning {
+            border-color: rgba(251, 191, 36, 0.27);
+            background: rgba(120, 53, 15, 0.18);
+        }
+
+        .fullscreen-mode .header,
+        .fullscreen-mode .steps,
+        .fullscreen-mode .controls,
+        .fullscreen-mode .visual-panel,
+        .fullscreen-mode .history-section,
+        .fullscreen-mode .info-grid {
+            display: none;
+        }
+
+        .fullscreen-mode .app {
+            width: 100%;
+            padding: 0;
+        }
+
+        .fullscreen-mode .main-grid {
+            display: block;
+        }
+
+        .fullscreen-mode .caption-panel {
+            min-height: 100vh;
+            border: 0;
+            border-radius: 0;
+        }
+
+        .fullscreen-mode .panel-header {
+            padding: 10px 15px;
+        }
+
+        .fullscreen-mode .live-caption {
+            min-height: calc(100vh - 170px);
+        }
+
+        .fullscreen-exit {
+            display: none;
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            z-index: 80;
+        }
+
+        .fullscreen-mode .fullscreen-exit {
+            display: block;
+        }
+
+        .modal {
+            position: fixed;
+            inset: 0;
+            z-index: 100;
+            display: none;
+            place-items: center;
+            padding: 18px;
+            background: rgba(0, 0, 0, 0.78);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal.show {
+            display: grid;
+        }
+
+        .modal-box {
+            width: min(440px, 100%);
+            padding: 22px;
+            border: 1px solid rgba(251, 113, 133, 0.3);
+            border-radius: 18px;
+            background: #151725;
+            box-shadow: var(--shadow);
+            text-align: center;
+        }
+
+        .modal-icon {
+            font-size: 2.5rem;
+        }
+
+        .modal-title {
+            margin: 8px 0 0;
+            font-size: 1.08rem;
+        }
+
+        .modal-message {
+            margin: 9px 0 18px;
+            color: var(--muted);
+            font-size: 0.85rem;
+            line-height: 1.75;
+            white-space: pre-line;
+        }
+
+        @media (max-width: 1050px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .caption-panel {
+                min-height: 520px;
+            }
+
+            .live-caption {
+                min-height: 330px;
+            }
+
+            .visual-content {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .visual-box:last-child {
+                grid-column: 1 / -1;
+            }
+        }
+
+        @media (max-width: 720px) {
+            .app {
+                width: min(100% - 18px, 1480px);
+                padding-top: 10px;
+            }
+
+            .header {
+                flex-direction: column;
+            }
+
+            .status {
+                width: 100%;
+                max-width: none;
+                border-radius: 12px;
+            }
+
+            .steps {
+                grid-template-columns: 1fr;
+            }
+
+            .controls {
+                position: sticky;
+                top: 6px;
+                z-index: 30;
+                background: rgba(20, 23, 36, 0.96);
+                backdrop-filter: blur(10px);
+            }
+
+            .btn {
+                flex: 1 1 calc(50% - 8px);
+            }
+
+            .size-control {
+                flex: 1 1 100%;
+                justify-content: space-between;
+            }
+
+            .size-control input {
+                flex: 1;
+            }
+
+            .btn-danger {
+                margin-left: 0;
+            }
+
+            .caption-panel {
+                min-height: 480px;
+            }
+
+            .live-caption {
+                min-height: 310px;
+                padding: 20px;
+            }
+
+            .visual-content {
+                grid-template-columns: 1fr;
+            }
+
+            .visual-box:last-child {
+                grid-column: auto;
+            }
+
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .history-item {
+                grid-template-columns: 30px 1fr;
+            }
+
+            .history-time {
+                grid-column: 2;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                scroll-behavior: auto !important;
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <button id="fullscreen-exit" class="btn fullscreen-exit" type="button">
+        ✕ 全画面を終了
+    </button>
+
+    <div class="app">
+        <header class="header">
+            <div class="title-wrap">
+                <div id="mic-indicator" class="mic-indicator" aria-hidden="true"></div>
+                <div>
+                    <h1>リアルタイム音声字幕＆音の見える化</h1>
+                    <p class="subtitle">
+                        マイクに入った日本語をすぐ大きな文字に変換し、
+                        音の波形・周波数・音量も同時に表示します。
+                    </p>
+                </div>
+            </div>
+
+            <div id="status" class="status" role="status" aria-live="polite">
+                「音声認識を開始」を押して、マイクの使用を許可してください。
+            </div>
+        </header>
+
+        <section class="steps" aria-label="使い方">
+            <div class="step"><strong>1</strong>音声認識を開始する</div>
+            <div class="step"><strong>2</strong>マイクへ自然な速さで話す</div>
+            <div class="step"><strong>3</strong>文字・波形・周波数の変化を観察する</div>
+        </section>
+
+        <section class="controls" aria-label="操作">
+            <button id="btn-toggle" class="btn btn-primary" type="button">
+                🎙️ 音声認識を開始
+            </button>
+            <button id="btn-freeze" class="btn" type="button" disabled>
+                ⏸️ グラフ停止：OFF
+            </button>
+            <button id="btn-fullscreen" class="btn" type="button">
+                🖥️ 字幕を全画面表示
+            </button>
+
+            <label class="size-control">
+                文字サイズ
+                <input id="font-size" type="range" min="38" max="110" value="64" step="2">
+                <span id="font-size-value">64px</span>
+            </label>
+
+            <button id="btn-clear" class="btn btn-danger" type="button">
+                🗑️ 文字を消去
+            </button>
+        </section>
+
+        <main class="main-grid">
+            <section class="panel caption-panel" aria-labelledby="caption-title">
+                <div class="panel-header">
+                    <h2 id="caption-title" class="panel-title">リアルタイム字幕</h2>
+                    <div class="panel-note">
+                        大きな文字＝認識中の内容<br>
+                        下段＝確定した内容
+                    </div>
+                </div>
+
+                <div class="live-caption">
+                    <div class="caption-label">現在の認識</div>
+                    <div id="interim-text" class="interim-text placeholder" aria-live="assertive">
+                        ここに話した内容が大きく表示されます
+                    </div>
+
+                    <div class="confidence-row">
+                        <span id="recognition-state" class="confidence-chip">待機中</span>
+                        <span id="confidence-chip" class="confidence-chip">認識信頼度：―</span>
+                        <span id="language-chip" class="confidence-chip">言語：日本語</span>
+                    </div>
+                </div>
+
+                <div class="confirmed-wrap">
+                    <div class="confirmed-label">
+                        <span>確定した字幕</span>
+                        <span id="confirmed-count">0文字</span>
+                    </div>
+                    <div id="confirmed-text" class="confirmed-text empty">
+                        確定した文章がここに蓄積されます
+                    </div>
+                </div>
+            </section>
+
+            <aside class="panel visual-panel" aria-labelledby="visual-title">
+                <div class="panel-header">
+                    <h2 id="visual-title" class="panel-title">音の見える化</h2>
+                    <div class="panel-note">
+                        音声認識とは別に<br>
+                        ブラウザ内で解析
+                    </div>
+                </div>
+
+                <div class="visual-content">
+                    <div class="visual-box">
+                        <div class="visual-heading">
+                            <span>音量</span>
+                            <span id="volume-value" class="visual-value">0%</span>
+                        </div>
+                        <div class="volume-meter" aria-label="音量メーター">
+                            <div id="volume-bar" class="volume-bar"></div>
+                        </div>
+                    </div>
+
+                    <div class="visual-box">
+                        <div class="visual-heading">
+                            <span>音の波形</span>
+                            <span class="visual-value">時間変化</span>
+                        </div>
+                        <canvas id="wave-canvas" width="620" height="190" aria-label="リアルタイム音声波形"></canvas>
+                    </div>
+
+                    <div class="visual-box">
+                        <div class="visual-heading">
+                            <span>周波数スペクトル</span>
+                            <span class="visual-value">低音 → 高音</span>
+                        </div>
+                        <canvas id="spectrum-canvas" width="620" height="250" aria-label="リアルタイム周波数スペクトル"></canvas>
+                    </div>
+
+                    <div class="stats-grid">
+                        <div class="stat">
+                            <span class="stat-label">確定文</span>
+                            <span id="sentence-count" class="stat-value">0</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">認識文字数</span>
+                            <span id="char-count" class="stat-value">0</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">経過時間</span>
+                            <span id="elapsed-time" class="stat-value">0:00</span>
+                        </div>
+                        <div class="stat">
+                            <span class="stat-label">マイク状態</span>
+                            <span id="mic-state" class="stat-value">停止</span>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+
+        <section class="panel history-section" aria-labelledby="history-title">
+            <div class="panel-header">
+                <h2 id="history-title" class="panel-title">直近の確定履歴</h2>
+                <div class="panel-note">最新5件</div>
+            </div>
+            <div id="history-list" class="history-list">
+                <div class="history-empty">まだ確定した発話はありません</div>
+            </div>
+        </section>
+
+        <section class="info-grid">
+            <div class="info-box">
+                <strong>この教材で観察できること</strong><br>
+                声はマイクで電気信号として取り込まれ、波形や周波数のデータとして扱われます。
+                音声認識機能は、その音声を日本語の文字へ変換します。
+                画面右側の波形・周波数表示は、文字変換結果を直接決めている画面ではなく、
+                同じマイク入力を別の方法で可視化したものです。
+            </div>
+
+            <div class="info-box warning">
+                <strong>マイクとプライバシーについて</strong><br>
+                波形・周波数の可視化はブラウザ内で処理します。
+                音声認識はブラウザやOSのサービスを利用するため、
+                音声データが外部サーバーで処理される場合があります。
+                氏名、住所、電話番号などの個人情報は発話しないでください。
+            </div>
+        </section>
+    </div>
+
+    <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal-box">
+            <div class="modal-icon">⚠️</div>
+            <h2 id="modal-title" class="modal-title">エラー</h2>
+            <p id="modal-message" class="modal-message"></p>
+            <button id="modal-close" class="btn" type="button">閉じる</button>
+        </div>
+    </div>
+
+    <script>
+        'use strict';
+
+        const SpeechRecognition =
+            window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        let recognition = null;
+        let shouldKeepListening = false;
+        let isRecognitionRunning = false;
+        let isRecognitionStarting = false;
+
+        let audioContext = null;
+        let analyser = null;
+        let mediaStream = null;
+        let microphoneSource = null;
+        let isAudioRunning = false;
+        let isFrozen = false;
+        let animationFrameId = null;
+        let lastDrawTime = 0;
+
+        let interimTranscript = '';
+        let confirmedTranscript = '';
+        let historyItems = [];
+        let sentenceCount = 0;
+        let startedAt = null;
+        let elapsedTimer = null;
+
+        const ui = {
+            micIndicator: document.getElementById('mic-indicator'),
+            status: document.getElementById('status'),
+            btnToggle: document.getElementById('btn-toggle'),
+            btnFreeze: document.getElementById('btn-freeze'),
+            btnFullscreen: document.getElementById('btn-fullscreen'),
+            btnFullscreenExit: document.getElementById('fullscreen-exit'),
+            btnClear: document.getElementById('btn-clear'),
+            fontSize: document.getElementById('font-size'),
+            fontSizeValue: document.getElementById('font-size-value'),
+            interimText: document.getElementById('interim-text'),
+            confirmedText: document.getElementById('confirmed-text'),
+            confirmedCount: document.getElementById('confirmed-count'),
+            recognitionState: document.getElementById('recognition-state'),
+            confidenceChip: document.getElementById('confidence-chip'),
+            volumeValue: document.getElementById('volume-value'),
+            volumeBar: document.getElementById('volume-bar'),
+            waveCanvas: document.getElementById('wave-canvas'),
+            spectrumCanvas: document.getElementById('spectrum-canvas'),
+            sentenceCount: document.getElementById('sentence-count'),
+            charCount: document.getElementById('char-count'),
+            elapsedTime: document.getElementById('elapsed-time'),
+            micState: document.getElementById('mic-state'),
+            historyList: document.getElementById('history-list'),
+            modal: document.getElementById('modal'),
+            modalTitle: document.getElementById('modal-title'),
+            modalMessage: document.getElementById('modal-message'),
+            modalClose: document.getElementById('modal-close')
+        };
+
+        const waveContext = ui.waveCanvas.getContext('2d');
+        const spectrumContext = ui.spectrumCanvas.getContext('2d');
+
+        function showModal(title, message) {
+            ui.modalTitle.textContent = title;
+            ui.modalMessage.textContent = message;
+            ui.modal.classList.add('show');
+        }
+
+        function closeModal() {
+            ui.modal.classList.remove('show');
+        }
+
+        function setStatus(message, active = false) {
+            ui.status.textContent = message;
+            ui.status.classList.toggle('active', active);
+        }
+
+        function updateControls() {
+            const active = shouldKeepListening || isRecognitionRunning || isRecognitionStarting;
+
+            ui.btnToggle.textContent = active
+                ? '⏹️ 音声認識を停止'
+                : '🎙️ 音声認識を開始';
+
+            ui.btnToggle.classList.toggle('listening', active);
+            ui.btnToggle.disabled = isRecognitionStarting;
+            ui.btnFreeze.disabled = !isAudioRunning;
+
+            ui.btnFreeze.textContent = `⏸️ グラフ停止：${isFrozen ? 'ON' : 'OFF'}`;
+            ui.btnFreeze.classList.toggle('btn-active', isFrozen);
+
+            ui.micIndicator.classList.toggle('active', active);
+            ui.micState.textContent = isAudioRunning ? '使用中' : '停止';
+            ui.recognitionState.textContent =
+                isRecognitionStarting ? '開始中' :
+                isRecognitionRunning ? '認識中' :
+                shouldKeepListening ? '再接続中' : '待機中';
+        }
+
+        function setInterimText(text) {
+            if (text.trim()) {
+                ui.interimText.textContent = text;
+                ui.interimText.classList.remove('placeholder');
+            } else {
+                ui.interimText.textContent = isRecognitionRunning
+                    ? '話しかけてください'
+                    : 'ここに話した内容が大きく表示されます';
+                ui.interimText.classList.add('placeholder');
+            }
+        }
+
+        function updateConfirmedText() {
+            if (confirmedTranscript.trim()) {
+                ui.confirmedText.textContent = confirmedTranscript.trim();
+                ui.confirmedText.classList.remove('empty');
+            } else {
+                ui.confirmedText.textContent = '確定した文章がここに蓄積されます';
+                ui.confirmedText.classList.add('empty');
+            }
+
+            const count = Array.from(confirmedTranscript.replace(/\s/g, '')).length;
+            ui.confirmedCount.textContent = `${count}文字`;
+            ui.charCount.textContent = count.toLocaleString();
+        }
+
+        function addHistory(text) {
+            const cleanText = text.trim();
+            if (!cleanText) return;
+
+            historyItems.unshift({
+                text: cleanText,
+                time: new Date()
+            });
+
+            if (historyItems.length > 5) {
+                historyItems = historyItems.slice(0, 5);
+            }
+
+            renderHistory();
+        }
+
+        function renderHistory() {
+            ui.historyList.innerHTML = '';
+
+            if (historyItems.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'history-empty';
+                empty.textContent = 'まだ確定した発話はありません';
+                ui.historyList.appendChild(empty);
+                return;
+            }
+
+            historyItems.forEach((item, index) => {
+                const row = document.createElement('div');
+                row.className = 'history-item';
+
+                const number = document.createElement('div');
+                number.className = 'history-number';
+                number.textContent = String(index + 1);
+
+                const text = document.createElement('div');
+                text.className = 'history-text';
+                text.textContent = item.text;
+
+                const time = document.createElement('div');
+                time.className = 'history-time';
+                time.textContent = item.time.toLocaleTimeString('ja-JP', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+
+                row.append(number, text, time);
+                ui.historyList.appendChild(row);
+            });
+        }
+
+        function initializeRecognition() {
+            if (!SpeechRecognition) {
+                showModal(
+                    '音声認識に対応していません',
+                    'このブラウザでは音声認識APIを利用できません。\nGoogle ChromeまたはMicrosoft Edgeの最新版を推奨します。'
+                );
+                ui.btnToggle.disabled = true;
+                setStatus('音声認識に対応していないブラウザです。');
+                return;
+            }
+
+            recognition = new SpeechRecognition();
+            recognition.lang = 'ja-JP';
+            recognition.interimResults = true;
+            recognition.continuous = true;
+            recognition.maxAlternatives = 1;
+
+            recognition.onstart = () => {
+                isRecognitionStarting = false;
+                isRecognitionRunning = true;
+                setStatus('音声認識中です。マイクへ話してください。', true);
+                updateControls();
+                setInterimText('');
+            };
+
+            recognition.onresult = (event) => {
+                let currentInterim = '';
+                let currentFinal = '';
+                let latestConfidence = null;
+
+                for (let index = event.resultIndex; index < event.results.length; index++) {
+                    const result = event.results[index];
+                    const transcript = result[0].transcript;
+
+                    if (result.isFinal) {
+                        currentFinal += transcript;
+                        if (typeof result[0].confidence === 'number') {
+                            latestConfidence = result[0].confidence;
+                        }
+                    } else {
+                        currentInterim += transcript;
+                    }
+                }
+
+                interimTranscript = currentInterim;
+                setInterimText(currentFinal + currentInterim);
+
+                if (latestConfidence !== null && latestConfidence > 0) {
+                    ui.confidenceChip.textContent =
+                        `認識信頼度：約${Math.round(latestConfidence * 100)}%`;
+                } else {
+                    ui.confidenceChip.textContent = '認識信頼度：表示なし';
+                }
+
+                if (currentFinal.trim()) {
+                    const cleanFinal = currentFinal.trim();
+                    confirmedTranscript +=
+                        `${confirmedTranscript.trim() ? '\n' : ''}${cleanFinal}`;
+
+                    sentenceCount += 1;
+                    ui.sentenceCount.textContent = sentenceCount.toLocaleString();
+                    addHistory(cleanFinal);
+                    updateConfirmedText();
+
+                    interimTranscript = '';
+                    setInterimText(cleanFinal);
+
+                    setTimeout(() => {
+                        if (!interimTranscript && isRecognitionRunning) {
+                            setInterimText('');
+                        }
+                    }, 1000);
+                }
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+
+                const fatalErrors = [
+                    'not-allowed',
+                    'service-not-allowed',
+                    'audio-capture'
+                ];
+
+                if (fatalErrors.includes(event.error)) {
+                    shouldKeepListening = false;
+                }
+
+                const messages = {
+                    'not-allowed': [
+                        'マイク権限エラー',
+                        'ブラウザのアドレスバーからマイクの使用を許可してください。'
+                    ],
+                    'service-not-allowed': [
+                        '音声認識を利用できません',
+                        'ブラウザまたは端末の音声認識サービスが利用できません。'
+                    ],
+                    'audio-capture': [
+                        'マイクが見つかりません',
+                        '利用できるマイクが接続されているか確認してください。'
+                    ],
+                    'network': [
+                        '通信エラー',
+                        '音声認識サービスとの通信に失敗しました。ネットワークを確認してください。'
+                    ]
+                };
+
+                if (messages[event.error]) {
+                    showModal(messages[event.error][0], messages[event.error][1]);
+                } else if (event.error !== 'no-speech' && event.error !== 'aborted') {
+                    setStatus(`音声認識エラー：${event.error}`);
+                }
+            };
+
+            recognition.onend = () => {
+                isRecognitionStarting = false;
+                isRecognitionRunning = false;
+                updateControls();
+
+                if (shouldKeepListening) {
+                    setStatus('音声認識を再接続しています…', true);
+                    window.setTimeout(startRecognitionSafely, 350);
+                } else {
+                    setStatus('音声認識は停止しています。');
+                    setInterimText('');
+                }
+            };
+        }
+
+        function startRecognitionSafely() {
+            if (
+                !recognition ||
+                !shouldKeepListening ||
+                isRecognitionRunning ||
+                isRecognitionStarting
+            ) {
+                return;
+            }
+
+            try {
+                isRecognitionStarting = true;
+                updateControls();
+                recognition.start();
+            } catch (error) {
+                console.warn('Recognition start error:', error);
+                isRecognitionStarting = false;
+                updateControls();
+                window.setTimeout(startRecognitionSafely, 500);
+            }
+        }
+
+        async function startAudioVisualization() {
+            if (isAudioRunning) return;
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                showModal(
+                    '音の見える化を利用できません',
+                    'このブラウザはマイク入力に対応していません。'
+                );
+                return;
+            }
+
+            try {
+                mediaStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    },
+                    video: false
+                });
+
+                const AudioContextClass =
+                    window.AudioContext || window.webkitAudioContext;
+
+                if (!AudioContextClass) {
+                    throw new Error('AudioContext is not supported.');
+                }
+
+                audioContext = new AudioContextClass();
+
+                if (audioContext.state === 'suspended') {
+                    await audioContext.resume();
+                }
+
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 1024;
+                analyser.smoothingTimeConstant = 0.48;
+                analyser.minDecibels = -95;
+                analyser.maxDecibels = -10;
+
+                microphoneSource = audioContext.createMediaStreamSource(mediaStream);
+                microphoneSource.connect(analyser);
+
+                isAudioRunning = true;
+                isFrozen = false;
+                updateControls();
+                drawLoop(performance.now());
+            } catch (error) {
+                console.error(error);
+                showModal(
+                    '音の見える化を開始できませんでした',
+                    'マイクの使用を許可してください。\n文字認識だけ動作し、波形表示が動かない場合があります。'
+                );
+            }
+        }
+
+        async function stopAudioVisualization() {
+            isAudioRunning = false;
+
+            if (animationFrameId !== null) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+
+            if (mediaStream) {
+                mediaStream.getTracks().forEach((track) => track.stop());
+                mediaStream = null;
+            }
+
+            if (microphoneSource) {
+                try {
+                    microphoneSource.disconnect();
+                } catch (error) {
+                    console.warn(error);
+                }
+                microphoneSource = null;
+            }
+
+            if (audioContext && audioContext.state !== 'closed') {
+                try {
+                    await audioContext.close();
+                } catch (error) {
+                    console.warn(error);
+                }
+            }
+
+            audioContext = null;
+            analyser = null;
+            isFrozen = false;
+            updateControls();
+            clearVisuals();
+        }
+
+        async function startAll() {
+            if (!recognition) return;
+
+            shouldKeepListening = true;
+
+            if (!startedAt) {
+                startedAt = Date.now();
+                startElapsedTimer();
+            }
+
+            await startAudioVisualization();
+            startRecognitionSafely();
+        }
+
+        async function stopAll() {
+            shouldKeepListening = false;
+
+            if (recognition) {
+                try {
+                    recognition.stop();
+                } catch (error) {
+                    console.warn(error);
+                }
+            }
+
+            await stopAudioVisualization();
+
+            isRecognitionRunning = false;
+            isRecognitionStarting = false;
+            updateControls();
+            setStatus('音声認識は停止しています。');
+            setInterimText('');
+        }
+
+        async function toggleAll() {
+            if (shouldKeepListening || isRecognitionRunning || isRecognitionStarting) {
+                await stopAll();
+            } else {
+                await startAll();
+            }
+        }
+
+        function calculateRms(timeData) {
+            let sum = 0;
+
+            for (let index = 0; index < timeData.length; index++) {
+                const centered = (timeData[index] - 128) / 128;
+                sum += centered * centered;
+            }
+
+            return Math.sqrt(sum / timeData.length);
+        }
+
+        function drawWaveform(timeData) {
+            const width = ui.waveCanvas.width;
+            const height = ui.waveCanvas.height;
+
+            waveContext.clearRect(0, 0, width, height);
+            waveContext.fillStyle = '#05060b';
+            waveContext.fillRect(0, 0, width, height);
+
+            waveContext.strokeStyle = 'rgba(167, 139, 250, 0.18)';
+            waveContext.lineWidth = 1;
+            waveContext.beginPath();
+            waveContext.moveTo(0, height / 2);
+            waveContext.lineTo(width, height / 2);
+            waveContext.stroke();
+
+            waveContext.strokeStyle = '#c084fc';
+            waveContext.lineWidth = 3;
+            waveContext.shadowBlur = 8;
+            waveContext.shadowColor = '#8b5cf6';
+            waveContext.beginPath();
+
+            const step = timeData.length / width;
+
+            for (let x = 0; x < width; x++) {
+                const index = Math.min(
+                    timeData.length - 1,
+                    Math.floor(x * step)
+                );
+
+                const normalized = (timeData[index] - 128) / 128;
+                const y = height / 2 + normalized * height * 0.43;
+
+                if (x === 0) {
+                    waveContext.moveTo(x, y);
+                } else {
+                    waveContext.lineTo(x, y);
+                }
+            }
+
+            waveContext.stroke();
+            waveContext.shadowBlur = 0;
+        }
+
+        function drawSpectrum(frequencyData) {
+            const width = ui.spectrumCanvas.width;
+            const height = ui.spectrumCanvas.height;
+
+            spectrumContext.clearRect(0, 0, width, height);
+            spectrumContext.fillStyle = '#05060b';
+            spectrumContext.fillRect(0, 0, width, height);
+
+            const displayedBins = Math.min(120, frequencyData.length);
+            const gap = 1.5;
+            const barWidth = width / displayedBins - gap;
+
+            for (let index = 0; index < displayedBins; index++) {
+                const value = frequencyData[index] / 255;
+                const barHeight = Math.max(1, value * (height - 14));
+
+                let color = '#60a5fa';
+                if (index > 32 && index <= 76) {
+                    color = '#8b5cf6';
+                } else if (index > 76) {
+                    color = '#f472b6';
+                }
+
+                spectrumContext.fillStyle = color;
+                spectrumContext.shadowBlur = value > 0.46 ? 5 : 0;
+                spectrumContext.shadowColor = color;
+
+                spectrumContext.fillRect(
+                    index * (barWidth + gap),
+                    height - barHeight - 5,
+                    barWidth,
+                    barHeight
+                );
+            }
+
+            spectrumContext.shadowBlur = 0;
+        }
+
+        function updateVolume(rms) {
+            const percent = Math.min(100, Math.round(rms * 350));
+            ui.volumeBar.style.width = `${percent}%`;
+            ui.volumeValue.textContent = `${percent}%`;
+        }
+
+        function drawLoop(timestamp) {
+            if (!isAudioRunning || !analyser) return;
+
+            animationFrameId = requestAnimationFrame(drawLoop);
+
+            if (isFrozen || timestamp - lastDrawTime < 42) {
+                return;
+            }
+
+            lastDrawTime = timestamp;
+
+            const timeData = new Uint8Array(analyser.fftSize);
+            const frequencyData = new Uint8Array(analyser.frequencyBinCount);
+
+            analyser.getByteTimeDomainData(timeData);
+            analyser.getByteFrequencyData(frequencyData);
+
+            const rms = calculateRms(timeData);
+
+            drawWaveform(timeData);
+            drawSpectrum(frequencyData);
+            updateVolume(rms);
+        }
+
+        function clearVisuals() {
+            const emptyTimeData = new Uint8Array(1024).fill(128);
+            const emptyFrequencyData = new Uint8Array(512);
+
+            drawWaveform(emptyTimeData);
+            drawSpectrum(emptyFrequencyData);
+            updateVolume(0);
+        }
+
+        function toggleFreeze() {
+            if (!isAudioRunning) return;
+            isFrozen = !isFrozen;
+            updateControls();
+
+            setStatus(
+                isFrozen
+                    ? 'グラフだけ停止しました。文字認識は続いています。'
+                    : 'グラフ表示を再開しました。',
+                shouldKeepListening
+            );
+        }
+
+        function clearText() {
+            confirmedTranscript = '';
+            interimTranscript = '';
+            historyItems = [];
+            sentenceCount = 0;
+
+            ui.sentenceCount.textContent = '0';
+            ui.confidenceChip.textContent = '認識信頼度：―';
+
+            updateConfirmedText();
+            renderHistory();
+            setInterimText('');
+
+            setStatus(
+                shouldKeepListening
+                    ? '字幕を消去しました。音声認識は続いています。'
+                    : '字幕を消去しました。',
+                shouldKeepListening
+            );
+        }
+
+        function toggleFullscreenMode(forceOff = false) {
+            const shouldEnable =
+                !forceOff && !document.body.classList.contains('fullscreen-mode');
+
+            document.body.classList.toggle('fullscreen-mode', shouldEnable);
+
+            if (shouldEnable && document.documentElement.requestFullscreen) {
+                document.documentElement.requestFullscreen().catch(() => {
+                    // ブラウザの全画面APIが拒否されても、CSS全画面表示は維持する
+                });
+            } else if (!shouldEnable && document.fullscreenElement) {
+                document.exitFullscreen().catch(() => {});
+            }
+        }
+
+        function updateFontSize() {
+            const value = Number(ui.fontSize.value);
+            document.documentElement.style.setProperty(
+                '--caption-size',
+                `${value}px`
+            );
+            ui.fontSizeValue.textContent = `${value}px`;
+        }
+
+        function startElapsedTimer() {
+            if (elapsedTimer !== null) return;
+
+            elapsedTimer = window.setInterval(() => {
+                if (!startedAt) {
+                    ui.elapsedTime.textContent = '0:00';
+                    return;
+                }
+
+                const elapsedSeconds = Math.floor((Date.now() - startedAt) / 1000);
+                const minutes = Math.floor(elapsedSeconds / 60);
+                const seconds = elapsedSeconds % 60;
+                ui.elapsedTime.textContent =
+                    `${minutes}:${String(seconds).padStart(2, '0')}`;
+            }, 500);
+        }
+
+        ui.btnToggle.addEventListener('click', toggleAll);
+        ui.btnFreeze.addEventListener('click', toggleFreeze);
+        ui.btnClear.addEventListener('click', clearText);
+        ui.btnFullscreen.addEventListener('click', () => toggleFullscreenMode(false));
+        ui.btnFullscreenExit.addEventListener('click', () => toggleFullscreenMode(true));
+        ui.fontSize.addEventListener('input', updateFontSize);
+        ui.modalClose.addEventListener('click', closeModal);
+
+        ui.modal.addEventListener('click', (event) => {
+            if (event.target === ui.modal) {
+                closeModal();
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                closeModal();
+
+                if (document.body.classList.contains('fullscreen-mode')) {
+                    toggleFullscreenMode(true);
+                }
+            }
+        });
+
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement) {
+                document.body.classList.remove('fullscreen-mode');
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            shouldKeepListening = false;
+
+            if (mediaStream) {
+                mediaStream.getTracks().forEach((track) => track.stop());
+            }
+
+            if (recognition && isRecognitionRunning) {
+                try {
+                    recognition.stop();
+                } catch (error) {
+                    console.warn(error);
+                }
+            }
+        });
+
+        function initialize() {
+            initializeRecognition();
+            updateFontSize();
+            updateConfirmedText();
+            renderHistory();
+            clearVisuals();
+            updateControls();
+
+            if (!window.isSecureContext) {
+                setStatus(
+                    'マイク利用にはHTTPSが必要です。GitHub Pagesで公開するとHTTPSになります。'
+                );
+            }
+        }
+
+        initialize();
+    </script>
+</body>
+</html>
