@@ -129,5 +129,3 @@ realtime-speech-caption-visualizer/
 ## ライセンス
 
 このプロジェクトは [MIT License](LICENSE) のもとで公開します。
-
-Copyright (c) 2026 近藤 昌也
